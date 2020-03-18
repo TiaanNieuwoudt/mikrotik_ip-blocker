@@ -10,26 +10,6 @@ today = datetime.datetime.now().strftime("%d-%m-%y")
 from ip_blocker import timer
 
 
-def db_insert():
-    s = socket.socket()
-    host = socket.gethostname()
-    port = 8080
-    s.bind((host, port))
-
-    s.listen(5)
-
-    while True:
-        c, addr = s.accept()
-        print("got connection from", addr)
-        data = c.recv(4096)
-        print(data)
-        obj = pickle.loads(data)
-        print(obj)
-
-        for ip in obj:
-            IPs.insert_IP(ip.IP, ip.date_time)
-
-
 def today_report():
     list_of_today = list()
     message = ""

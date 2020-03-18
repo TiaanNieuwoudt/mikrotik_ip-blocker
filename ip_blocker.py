@@ -46,7 +46,6 @@ def failed_loggins(api):
 
             white_list = re.findall(r"(160\.19\.23[2-5])\.", ip)
 
-            print(white_list)
             if not white_list:
                 logged_attempt["date_time"] = (datetime.date.today(), entry["time"])
                 logged_attempts.append(logged_attempt)
@@ -115,23 +114,24 @@ def create_address_list(api, attempts):
     for attempt in attempts:
         ip = attempt["ip"]
         if ip not in exsisting_ips:
-
+            
             COMMAND_SOURCE = '/ip firewall address-list add address={} list=BLOCKED_SUBNETS timeout=36d'.format(ip)
             run_script(path=COMMAND_PATH, source=COMMAND_SOURCE, id=COMMAND_ID, api=api)
             ip_inst = BlockedIP(ip, datetime.datetime.now())
             IPs.insert_IP(ip_address=ip_inst.IP, date_time=ip_inst.date_time)
 
 
+            
+            
 def timer():
-    api = api_connect(host='10.253.254.1', username='TwK_C0r3', password='Ktm99O-F0ur-Str0k3',
+    # Change username, password and hostname to relevant details
+    api = api_connect(host='router_hostname', username='router_username', password='router_password',
                       plaintext=True)
 
     api_connection = api.get_api()
     logins = failed_loggins(api_connection)
     attempts = attempt_counter(logins)
 
-    for attempt in attempts:
-        print(attempt)
 
     create_address_list(api=api_connection, attempts=attempts)
     api.disconnect()

@@ -24,8 +24,8 @@ def today_report():
             message =  message + str(ip.ip_address) + '  Blocked at:  ' + str(ip.date_time) + '\n'
             
         #insert email address
-        sender_address = "Enter your email here"
-        mailer(sender address, message)
+        sender_address = "Enter receiver email address "
+        mailer(receiver_address, message)
 
 
 def scheduler():

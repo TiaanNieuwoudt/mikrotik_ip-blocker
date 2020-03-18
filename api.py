@@ -42,8 +42,10 @@ def today_report():
     if len(list_of_today) != 0:
         for ip in list_of_today:
             message =  message + str(ip.ip_address) + '  Blocked at:  ' + str(ip.date_time) + '\n'
-
-        mailer('tiaan.n@twk.co.za', message)
+            
+        #insert email address
+        sender_address = "Enter your email here"
+        mailer(sender address, message)
 
 
 def scheduler():

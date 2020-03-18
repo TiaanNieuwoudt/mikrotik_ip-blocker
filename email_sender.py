@@ -10,16 +10,16 @@ def mailer(to, message):
     message = message
 
     # setup the parameters of the message
-    password = "Z0~x*{I*xhDs"
-    msg['From'] = "tiaan.n@twk.co.za"
-    msg['To'] = "tiaan.n@twk.co.za"
+    password = "Enter email password"
+    msg['From'] = "enter sender address "
+    msg['To'] = "enter receiver address"
     msg['Subject'] = "ip_blocker"
 
     # add in the message body
     msg.attach(MIMEText(message, 'plain'))
 
     # create server
-    server = smtplib.SMTP('mail.twk.co.za: 587')
+    server = smtplib.SMTP('Enter smtp server with port number')
 
     server.starttls()
 

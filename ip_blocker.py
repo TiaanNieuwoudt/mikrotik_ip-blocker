@@ -3,7 +3,6 @@ import re
 import datetime
 import time
 import socket
-import pickle
 from ip_db import IPs
 
 
@@ -43,8 +42,11 @@ def failed_loggins(api):
 
             logged_attempt = dict()
             logged_attempt["id"], logged_attempt["ip"] = entry["id"], ip
-
-            white_list = re.findall(r"(160\.19\.23[2-5])\.", ip)
+            
+            # insert own regex string(confidential information, could not add used range)
+            
+            regex_string = "insert specified ip's filtered by regex string"
+            white_list = re.findall(regex_string, ip)
 
             if not white_list:
                 logged_attempt["date_time"] = (datetime.date.today(), entry["time"])

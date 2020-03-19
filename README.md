@@ -12,3 +12,5 @@ Ip addresses gets added to sqlite database and simple IP address: date time mail
 
 
 Anyone is welcome to provide me with some kind of task that needs to be done on mikrotik, I'll be happy to give it a try.
+
+NOTE: The MIkrotik firewall is supposed to block IP's added to the address list, and not the Python program itself

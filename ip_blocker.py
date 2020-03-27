@@ -1,141 +1,162 @@
 from routeros_api import RouterOsApiPool
+from routeros_api.exceptions import RouterOsApiConnectionError
 import re
 import datetime
-import time
-import socket
 from ip_db import IPs
 
 
 class BlockedIP:
+
     def __init__(self, ip, date_time):
         self.IP = ip
         self.date_time = date_time
 
-
-def socket_send(payload):
-    pickled_payload = pickle.dumps(payload)
-    s = socket.socket()
-    host = socket.gethostname()
-    port = 8080
-    try:
-        s.connect((host, port))
-        s.sendall(pickled_payload)
-        s.close()
-    except ConnectionRefusedError:
-        print("connection could not be made")
+########################################################################################################################
 
 
-def api_connect(host, username, password, plaintext):
-    connection = RouterOsApiPool(host=host, username=username, password=password, plaintext_login=plaintext)
-    return connection
+class API:
+    def __init__(self, hostname, username, password):
+
+        # Router Credentials
+        self.hostname = hostname
+        self.username = username
+        self.password = password
+
+        self.connection = None
+
+        self.api = None
+
+########################################################################################################################
+
+    def connect(self):
+
+        connection = RouterOsApiPool(host=self.hostname, username=self.username, password=self.password,
+                                     plaintext_login=True)
+        return connection
+
+########################################################################################################################
+
+    def get_api(self):
+        try:
+            self.api = self.connection.get_api()
+
+        except RouterOsApiConnectionError:
+            self.api = None
 
 
-def failed_loggins(api):
-    logged_attempts = list()
-    saved_attempts = list()
-    log = api.get_resource('log').get()
+########################################################################################################################
 
-    for entry in log:
+    def check_api(self):
+        if self.api:
+            try:
+                self.api.get_resource('log').get()
+                return self.api
 
-        if "denied winbox/dude connect from" in entry["message"]:
-            ip = re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", entry["message"])[0]
-
-            logged_attempt = dict()
-            logged_attempt["id"], logged_attempt["ip"] = entry["id"], ip
-            
-            # insert own regex string(confidential information, could not add used range)
-            
-            regex_string = "insert specified ip's filtered by regex string"
-            white_list = re.findall(regex_string, ip)
-
-            if not white_list:
-                logged_attempt["date_time"] = (datetime.date.today(), entry["time"])
-                logged_attempts.append(logged_attempt)
-
-    if len(saved_attempts) > 0:
-        for saved_attempt in saved_attempts:
-            if len(logged_attempts) > 0:
-                for failed_attempt in logged_attempts:
-                    if failed_attempt["id"] != saved_attempt["id"]:
-                        saved_attempts.append(failed_attempt)
-
-    else:
-        for attempt in logged_attempts:
-            saved_attempts.append(attempt)
-
-    return saved_attempts
+            except RouterOsApiConnectionError:
+                self.api = None
+                return self.api
 
 
-def attempt_counter(attempts):
-    ip_counter = list()
-    tested_ips = list()
+########################################################################################################################
 
-    for attempt in attempts:
-        attempt_ip = attempt["ip"]
-        if len(ip_counter) > 0:
-            if attempt_ip not in tested_ips:
-                new_counter = dict()
-                new_counter["ip"] = attempt_ip
-                new_counter["counter"] = 1
-                ip_counter.append(new_counter)
-                tested_ips.append(new_counter["ip"])
+    def run_script(self, path, source, id):
 
-            else:
-                for ip_counter_entry in ip_counter:
-                    if attempt_ip == ip_counter_entry["ip"]:
-                        ip_counter_entry["counter"] += 1
+        if not self.check_api():
+            return None
+
+        prefix = self.api.get_resource(path)
+        prefix.add(name=id, source=source)
+
+        self.api.get_resource(path).call('run', {'id': id})
+
+        prefix.remove(id=id)
+
+########################################################################################################################
+
+    def check_log(self):
+
+        if not self.check_api():
+            print("Failed attemtps could not create API instance, finnishing up script")
+            return None
+
+        logged_attempts = list()
+        saved_attempts = list()
+        log = self.api.get_resource('log').get()
+
+        for entry in log:
+            if "denied winbox/dude connect from" in entry["message"]:
+                ip = re.findall(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", entry["message"])[0]
+
+                logged_attempt = dict()
+                logged_attempt["id"], logged_attempt["ip"] = entry["id"], ip
+                regex_string = "Modify your set of IP's"
+                white_list = re.findall(regex_string, ip)
+
+                if not white_list:
+                    logged_attempts.append(logged_attempt)
+
+        if len(saved_attempts) > 0:
+            for saved_attempt in saved_attempts:
+                if len(logged_attempts) > 0:
+                    for logged_attempt in logged_attempts:
+                        if saved_attempt["id"] != logged_attempt["id"]:
+                            saved_attempts.append(logged_attempt)
+
         else:
-            new_ip = dict()
-            new_ip["ip"] = attempt_ip
-            new_ip["counter"] = 1
-            ip_counter.append(new_ip)
-            tested_ips.append(new_ip["ip"])
+            for logged_attempt in logged_attempts:
+                saved_attempts.append(logged_attempt)
 
-    return ip_counter
+        return saved_attempts
 
 
-def run_script(path, source, id, api):
-    prefix = api.get_resource(path)
-    prefix.add(name=id, source=source)
-    api.get_resource(path).call('run', {'id': id})
-    prefix.remove(id=id)
+
+########################################################################################################################
+
+    def create_address_list(self, attempts):
+
+        COMMAND_PATH = '/sys/script/'
+        COMMAND_ID = 'ip_block'
+        COMMAND_SOURCE = str()
+
+        exsisting_ips = list()
+
+        if not self.check_api():
+            print("Error connecting to API while creating starting address list")
+            return None
+
+        if not attempts:
+            return None
+
+        blocked_subnet = self.api.get_resource('/ip/firewall/address-list').get()
+        for subnet in blocked_subnet:
+            if subnet["list"] == "BLOCKED_SUBNETS":
+                exsisting_ips.append(subnet["address"])
+
+        if attempts:
+            for attempt in attempts:
+                ip = attempt["ip"]
+                if ip not in exsisting_ips:
+                    COMMAND_SOURCE = COMMAND_SOURCE + '/ip firewall address-list add address={} list=BLOCKED_SUBNETS ' \
+                                                      'timeout=36d\n'.format(ip)
+
+                    ip_inst = BlockedIP(ip, datetime.datetime.now())
+                    IPs.insert_IP(ip_address=ip_inst.IP, date_time=ip_inst.date_time)
+
+            self.run_script(path=COMMAND_PATH, source=COMMAND_SOURCE, id=COMMAND_ID)
+
+        self.connection.disconnect()
+
+########################################################################################################################
+
+    def full_sequence(self):
+        self.connect()
+
+        if not self.check_api():
+            return None
+
+        self.connection.get_api()
+        log = self.check_log()
+        self.create_address_list(log)
 
 
-def create_address_list(api, attempts):
-    exsisting_ips = list()
-    new_ips = list()
-    COMMAND_PATH = '/sys/script/'
-    COMMAND_ID = 'ip_block'
-    blocked_subnets = api.get_resource('/ip/firewall/address-list').get()
-
-    for i in blocked_subnets:
-        if i["list"] == "BLOCKED_SUBNETS":
-            exsisting_ips.append(i["address"])
-
-    print(len(attempts))
-    for attempt in attempts:
-        ip = attempt["ip"]
-        if ip not in exsisting_ips:
-            
-            COMMAND_SOURCE = '/ip firewall address-list add address={} list=BLOCKED_SUBNETS timeout=36d'.format(ip)
-            run_script(path=COMMAND_PATH, source=COMMAND_SOURCE, id=COMMAND_ID, api=api)
-            ip_inst = BlockedIP(ip, datetime.datetime.now())
-            IPs.insert_IP(ip_address=ip_inst.IP, date_time=ip_inst.date_time)
-
-
-            
-            
-def timer():
-    # Change username, password and hostname to relevant details
-    api = api_connect(host='router_hostname', username='router_username', password='router_password',
-                      plaintext=True)
-
-    api_connection = api.get_api()
-    logins = failed_loggins(api_connection)
-    attempts = attempt_counter(logins)
-
-
-    create_address_list(api=api_connection, attempts=attempts)
-    api.disconnect()
-
-
+api_instance = API(hostname='10.253.254.1', username=your username, password=Your password)

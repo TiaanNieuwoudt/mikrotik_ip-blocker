@@ -11,6 +11,7 @@ class BlockedIP:
         self.IP = ip
         self.date_time = date_time
 
+
 ########################################################################################################################
 
 
@@ -26,25 +27,24 @@ class API:
 
         self.api = None
 
-########################################################################################################################
+    ########################################################################################################################
 
     def connect(self):
 
-        connection = RouterOsApiPool(host=self.hostname, username=self.username, password=self.password,
+        self.connection = RouterOsApiPool(host=self.hostname, username=self.username, password=self.password,
                                      plaintext_login=True)
-        return connection
+        return self.connection
 
-########################################################################################################################
+    ########################################################################################################################
 
     def get_api(self):
         try:
             self.api = self.connection.get_api()
-
+            return self.api
         except RouterOsApiConnectionError:
             self.api = None
 
-
-########################################################################################################################
+    ########################################################################################################################
 
     def check_api(self):
         if self.api:
@@ -56,22 +56,19 @@ class API:
                 self.api = None
                 return self.api
 
+    ########################################################################################################################
 
-########################################################################################################################
-
-    def run_script(self, path, source, id):
+    def add_ips(self, address, list):
 
         if not self.check_api():
             return None
 
-        prefix = self.api.get_resource(path)
-        prefix.add(name=id, source=source)
+        prefix = self.api.get_resource('ip/firewall/address-list')
+        prefix.add(address=address, list=list, timeout='35d')
 
-        self.api.get_resource(path).call('run', {'id': id})
 
-        prefix.remove(id=id)
 
-########################################################################################################################
+    ########################################################################################################################
 
     def check_log(self):
 
@@ -89,7 +86,7 @@ class API:
 
                 logged_attempt = dict()
                 logged_attempt["id"], logged_attempt["ip"] = entry["id"], ip
-                regex_string = "Modify your set of IP's"
+                regex_string = "Modify your IP specifications Here"
                 white_list = re.findall(regex_string, ip)
 
                 if not white_list:
@@ -108,15 +105,48 @@ class API:
 
         return saved_attempts
 
+    ########################################################################################################################
 
+    def attempt_counter(self, attempts):
 
+        if attempts:
+            ip_counter = list()
+            tested_ips = list()
+
+            for attempt in attempts:
+                attempt_ip = attempt["ip"]
+                if len(ip_counter) > 0:
+                    if attempt_ip not in tested_ips:
+                        new_counter = dict()
+                        new_counter["ip"], new_counter["counter"] = attempt_ip, 1
+
+                        ip_counter.append(new_counter)
+                        tested_ips.append(new_counter["ip"])
+
+                    else:
+                        for ip_counter_entry in ip_counter:
+                            if attempt_ip == ip_counter_entry["ip"]:
+                                ip_counter_entry["counter"] += 1
+                else:
+                    new_ip = dict()
+                    new_ip["ip"] = attempt_ip
+                    new_ip["counter"] = 1
+                    ip_counter.append(new_ip)
+                    tested_ips.append(new_ip["ip"])
+
+            return ip_counter
+
+        ip_counter = None
+        return ip_counter
+
+########################################################################################################################
 ########################################################################################################################
 
     def create_address_list(self, attempts):
 
         COMMAND_PATH = '/sys/script/'
         COMMAND_ID = 'ip_block'
-        COMMAND_SOURCE = str()
+
 
         exsisting_ips = list()
 
@@ -136,13 +166,11 @@ class API:
             for attempt in attempts:
                 ip = attempt["ip"]
                 if ip not in exsisting_ips:
-                    COMMAND_SOURCE = COMMAND_SOURCE + '/ip firewall address-list add address={} list=BLOCKED_SUBNETS ' \
-                                                      'timeout=36d\n'.format(ip)
+                    print(ip)
+                    self.add_ips(address=ip, list="BLOCKED_SUBNETS")
 
                     ip_inst = BlockedIP(ip, datetime.datetime.now())
                     IPs.insert_IP(ip_address=ip_inst.IP, date_time=ip_inst.date_time)
-
-            self.run_script(path=COMMAND_PATH, source=COMMAND_SOURCE, id=COMMAND_ID)
 
         self.connection.disconnect()
 
@@ -151,12 +179,15 @@ class API:
     def full_sequence(self):
         self.connect()
 
+        self.get_api()
+        print(self.api)
+
         if not self.check_api():
             return None
 
-        self.connection.get_api()
         log = self.check_log()
-        self.create_address_list(log)
+        attempt_counter = self.attempt_counter(log)
+        self.create_address_list(attempt_counter)
 
 
-api_instance = API(hostname='10.253.254.1', username=your username, password=Your password)
+api_instance = API(hostname='10.253.254.1', username=Your username, password= Your password)

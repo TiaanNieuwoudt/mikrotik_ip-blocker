@@ -6,7 +6,7 @@ import os
 
 
 dir_path = os.getcwd()
-engine = create_engine('sqlite:///' + dir_path + '\ip_db.db')
+engine = create_engine('sqlite:////home/pi/ip_db.db')
 
 Base = declarative_base()
 
